@@ -56,32 +56,31 @@ def viz_region(dp_file, pixel_ids, ds_name, ion_name, odir):
 
 			break
 
-def draw_dataset_ion(dsf_file, dp_file, ds_name, ion_id, odir):
-	# find quantile intensity
-	ds_iterator = pd.read_msgpack(dsf_file, iterator = True)
-	for name, df in ds_iterator:
-		if name == ds_name:
-			ion_rows = df.loc[df['ion_id'] == ion_id]
-			q = np.percentile(ion_rows.int,95)
-			#print(q)
-			break
-
+def draw_dataset_ion(dsf_file, dp_file, ds_name, ion_id, ion_name, quan, odir):
 	dp_iterator = pd.read_msgpack(dp_file, iterator = True)
+	cords = {}
 	for name, df in dp_iterator:
 		if name == ds_name:
 			max_x = df['x'].max()
 			max_y = df['y'].max()
-
 			arr = numpy.zeros([max_x+1, max_y+1])
 
-			#print(numpy.min(df.index.values),numpy.max(df.index.values),len(df.index.values))
+			for ir in df.itertuples():
+				cords[ir[0]] = (ir[1],ir[2])
+			break
+
+	ds_iterator = pd.read_msgpack(dsf_file, iterator = True)
+	for name, df in ds_iterator:
+		if name == ds_name:
+			ion_rows = df.loc[df['ion_id'] == ion_id]
+			ints = ion_rows['int'].tolist()
+			q = numpy.percentile(ints,quan)
 
 			for ir in ion_rows.itertuples():
 				pid = ir[1]
 				i = ir[3]
 
-				rel_row = df.loc[pid]
-				arr[rel_row['x']][rel_row['y']] = i
+				arr[cords[pid][0]][cords[pid][1]] = i
 
 			arr[arr > q] = q
 			arr = np.rot90(arr, 1)
@@ -89,7 +88,7 @@ def draw_dataset_ion(dsf_file, dp_file, ds_name, ion_id, odir):
 			plt.pcolormesh(arr,cmap='viridis')
 			plt.axes().set_aspect('equal', 'datalim')
 			plt.axes().axis('off')
-			fname =  ds_name + '_' + str(ion_id)
+			fname =  ds_name + '_' + ion_name
 			plt.title(fname)
 
 			if odir: 
@@ -98,6 +97,7 @@ def draw_dataset_ion(dsf_file, dp_file, ds_name, ion_id, odir):
 			else: plt.show()
 
 			break
+
 def main():
 
 	parser = argparse.ArgumentParser( description="Select pixels by ion intensity" )
@@ -115,9 +115,7 @@ def main():
 
 	ion_id = sfname2index(pa.sf, pa.s, pa.a.lstrip())
 
-	#print(ion_id)
-
-	draw_dataset_ion(pa.dsf, pa.dp, pa.d, ion_id, pa.o)
+	draw_dataset_ion(pa.dsf, pa.dp, pa.d, ion_id, pa.s+pa.a, 99., pa.o)
 
 	#pixel_ids = select_region(pa.dsf, pa.d, ion_id, pa.i)
 	#viz_region(pa.dp, pixel_ids, pa.d, pa.s+pa.a, pa.o)
