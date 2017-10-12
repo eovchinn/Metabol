@@ -416,7 +416,8 @@ class Word2Vec(utils.SaveLoad):
             self, corpus=None,train=None, ion=None, size=100, alpha=0.025, window=5, min_count=5,
             max_vocab_size=None, sample=1e-3, seed=1, workers=3, min_alpha=0.0001,
             sg=0, hs=0, negative=5, cbow_mean=1, hashfxn=hash, iter=5, null_word=0,
-            trim_rule=None, sorted_vocab=1, batch_words=MAX_WORDS_IN_BATCH, compute_loss=False, fdr=51, int_per=0.5, pix_per=None):
+            trim_rule=None, sorted_vocab=1, batch_words=MAX_WORDS_IN_BATCH, compute_loss=False, 
+            fdr=51, int_per=0.5, pix_per=1., quan = 99.):
         """
         Initialize the model from an iterable of `sentences`. Each sentence is a
         list of words (unicode strings) that will be used for training.
@@ -526,7 +527,7 @@ class Word2Vec(utils.SaveLoad):
         self.running_training_loss = 0
 
         if ion is not None and train is not None:
-            self.build_vocab_pix(ion, train, fdr=fdr, int_per=int_per, pix_per=pix_per)
+            self.build_vocab_pix(ion, train, fdr=fdr, int_per=int_per, pix_per=pix_per, quan=quan)
             self.train_pix(corpus, total_examples=self.corpus_count, epochs=self.iter,
                        start_alpha=self.alpha, end_alpha=self.min_alpha)
         else :
@@ -594,7 +595,7 @@ class Word2Vec(utils.SaveLoad):
 
             logger.info("built huffman tree with maximum node depth %i", max_depth)
 
-    def build_vocab_pix(self, ion_df_path, ds_dir, min_count=None, sample=None, fdr=None, int_per=None, pix_per=None):
+    def build_vocab_pix(self, ion_df_path, ds_dir, min_count=None, sample=None, fdr=None, int_per=None, pix_per=None, quan=None):
         logger.info("Building vocabulary from %s and %s", ion_df_path, ds_dir)
 
         self.corpus_count = 0
@@ -604,6 +605,9 @@ class Word2Vec(utils.SaveLoad):
         for f in os.listdir(ds_dir):
             ds_df = pd.read_msgpack(os.path.join(ds_dir,f))
 
+            #print(f)
+            #print(ds_df.head())
+
             #int_thresh = ds_df['int'].max() * int_per
             #filt_df = ds_df[(ds_df.fdr < fdr) & (ds_df.int > int_thresh)]
 
@@ -612,7 +616,11 @@ class Word2Vec(utils.SaveLoad):
             ions = rel_rows.ion_ind.unique()
             for ion in ions:
                 ion_rows = rel_rows[rel_rows.ion_ind == ion]
-                int_thresh = percentile(ion_rows.int.tolist(), 99.) * int_per
+                # remove hot spots
+                perc = percentile(ion_rows.int.tolist(), 99.)
+                ion_rows = ion_rows[ion_rows.int < perc]
+                # compute intensity threshold
+                int_thresh = percentile(ion_rows.int.tolist(), quan) * int_per
                 rel_int_rows = ion_rows[ion_rows.int > int_thresh]
                 if first: 
                     filt_df = rel_int_rows.copy()
@@ -1795,12 +1803,13 @@ class Word2Vec(utils.SaveLoad):
 
 
 class PixelCorpus(object):
-    def __init__(self, ds_dir, fdr_thresh, pix_per, int_per, window):
+    def __init__(self, ds_dir, fdr_thresh, pix_per, int_per, window, quan):
         self.f = fdr_thresh
         self.ds_dir = ds_dir
         self.p = pix_per
         self.i = int_per
         self.w = window
+        self.q = quan
 
     def __iter__(self):
         for f in os.listdir(self.ds_dir):
@@ -1815,7 +1824,11 @@ class PixelCorpus(object):
             ions = rel_rows.ion_ind.unique()
             for ion in ions:
                 ion_rows = rel_rows[rel_rows.ion_ind == ion]
-                int_thresh = percentile(ion_rows.int.tolist(), 99.) * self.i
+                # remove hot spots
+                perc = percentile(ion_rows.int.tolist(), 99.)
+                ion_rows = ion_rows[ion_rows.int < perc]
+                # compute intensity threshold
+                int_thresh = percentile(ion_rows.int.tolist(), self.q) * self.i
                 rel_int_rows = ion_rows[ion_rows.int > int_thresh]
                 if first: 
                     filt_df = rel_int_rows.copy()
@@ -1882,6 +1895,7 @@ if __name__ == "__main__":
     parser.add_argument("-cbow", help="Use the continuous bag of words model; default is 1 (use 0 for skip-gram model)", type=int, default=1, choices=[0, 1])
     parser.add_argument("-binary", help="Save the resulting vectors in binary mode; default is 0 (off)", type=int, default=0, choices=[0, 1])
     parser.add_argument("-accuracy", help="Use questions from file ACCURACY to evaluate the model")
+    parser.add_argument("-quan", help="Quantile parameter", default = 99.)
 
     args = parser.parse_args()
 
@@ -1890,7 +1904,7 @@ if __name__ == "__main__":
     else:
         skipgram = 0
 
-    corpus = PixelCorpus(args.train, args.fdr, args.pix_per, args.int_per, args.window)
+    corpus = PixelCorpus(args.train, args.fdr, args.pix_per, args.int_per, args.window, args.quan)
 
     #ion_df = pd.read_msgpack(args.ion)
 
@@ -1911,7 +1925,8 @@ if __name__ == "__main__":
     model = Word2Vec(
         corpus=corpus, train=args.train, ion=args.ion, size=args.size, min_count=args.min_count, workers=args.threads,
         window=args.window, sample=args.sample, sg=skipgram, hs=args.hs,
-        negative=args.negative, cbow_mean=1, iter=args.iter, fdr=args.fdr, int_per=args.int_per, pix_per=args.pix_per)
+        negative=args.negative, cbow_mean=1, iter=args.iter, fdr=args.fdr, 
+        int_per=args.int_per, pix_per=args.pix_per, quan = args.quan)
 
     if args.output:
         outfile = args.output
