@@ -635,7 +635,8 @@ class Word2Vec(utils.SaveLoad):
                 ion_freq[i] += freq_counts[i]
 
             # how many pixels will be taken from each dataset
-            self.corpus_count += int(len(filt_df.p_ind.unique()) * pix_per)
+            #self.corpus_count += int(len(filt_df.p_ind.unique()) * pix_per)
+            self.corpus_count += int(len(filt_df[['x', 'y']].drop_duplicates().index) * pix_per)
 
         """Filter out unfrequent words, frequent words, set up word probabilities."""
         min_count = min_count or self.min_count
@@ -1835,15 +1836,19 @@ class PixelCorpus(object):
                     first = False
                 else: filt_df = filt_df.append(rel_int_rows.copy())
 
-            all_pix_ids = filt_df.p_ind.unique()
-            pix_ids = random.choice(all_pix_ids, int(len(all_pix_ids) * self.p))
+            #all_pix_ids = filt_df.p_ind.unique()
+            #pix_ids = random.choice(all_pix_ids, int(len(all_pix_ids) * self.p))
+            if self.p != 1.0:
+                sampled_coord_df = filt_df[['x', 'y']].drop_duplicates().sample(frac=self.p)
+            else: 
+                sampled_coord_df = filt_df[['x', 'y']].drop_duplicates()
+            logging.info("%i pixels selected for %s", len(sampled_coord_df.index), f)
 
-            logging.info("%i pixels selected for %s", len(pix_ids), f)
-
-            for pid in pix_ids:
-                p_row = filt_df[filt_df.p_ind == pid].iloc[0]
-                x = p_row.get_value('x')
-                y = p_row.get_value('y')
+            #for pid in pix_ids:
+            #    p_row = filt_df[filt_df.p_ind == pid].iloc[0]
+            for _, c_row in sampled_coord_df.iterrows():
+                x = c_row['x']
+                y = c_row['y']
 
                 window_rows = filt_df[(filt_df['x'].between(x-self.w, x+self.w, inclusive=True)) & (filt_df['y'].between(y-self.w, y+self.w, inclusive=True))]
                 #window_rows = ds_df[(ds_df.x <= x + self.w) & (ds_df.x >= x - self.w) & (ds_df.y <= y + self.w) & (ds_df.y >= y - self.w)]
