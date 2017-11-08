@@ -608,25 +608,22 @@ class Word2Vec(utils.SaveLoad):
             #print(f)
             #print(ds_df.head())
 
-            #int_thresh = ds_df['int'].max() * int_per
-            #filt_df = ds_df[(ds_df.fdr < fdr) & (ds_df.int > int_thresh)]
-
-            rel_rows = ds_df[ds_df.fdr < fdr]
+            ds_df = ds_df[ds_df.fdr < fdr]
             first = True 
-            ions = rel_rows.ion_ind.unique()
-            for ion in ions:
-                ion_rows = rel_rows[rel_rows.ion_ind == ion]
+            #ions = ds_df.ion_ind.unique()
+            for _, ion_rows in ds_df.groupby('ion_ind'):
+                #ion_rows = rel_rows[rel_rows.ion_ind == ion]
                 # remove hot spots
                 perc = percentile(ion_rows.int.tolist(), 99.)
-                ion_rows = ion_rows[ion_rows.int < perc]
+                ion_rows.loc[(ion_rows['int'] > perc), ['int']] = perc
                 # compute intensity threshold
                 int_thresh = percentile(ion_rows.int.tolist(), quan) * int_per
-                rel_int_rows = ion_rows[ion_rows.int > int_thresh]
+                int_rows = ion_rows[ion_rows.int > int_thresh]
                 if first: 
-                    filt_df = rel_int_rows.copy()
+                    filt_df = int_rows.copy()
                     first = False
                 else: 
-                    filt_df = filt_df.append(rel_int_rows.copy())
+                    filt_df = filt_df.append(int_rows.copy())
 
             #print(len(rel_rows.index),len(filt_df.index))
 
@@ -635,7 +632,6 @@ class Word2Vec(utils.SaveLoad):
                 ion_freq[i] += freq_counts[i]
 
             # how many pixels will be taken from each dataset
-            #self.corpus_count += int(len(filt_df.p_ind.unique()) * pix_per)
             self.corpus_count += int(len(filt_df[['x', 'y']].drop_duplicates().index) * pix_per)
 
         """Filter out unfrequent words, frequent words, set up word probabilities."""
@@ -1820,24 +1816,22 @@ class PixelCorpus(object):
 
             #filt_df = ds_df[(ds_df.fdr < self.f) & (ds_df.int > int_thresh)] 
 
-            rel_rows = ds_df[ds_df.fdr < self.f]
+            ds_df = ds_df[ds_df.fdr < self.f]
             first = True 
-            ions = rel_rows.ion_ind.unique()
-            for ion in ions:
-                ion_rows = rel_rows[rel_rows.ion_ind == ion]
+            #ions = rel_rows.ion_ind.unique()
+            for _, ion_rows in ds_df.groupby('ion_ind'):
+                #ion_rows = rel_rows[rel_rows.ion_ind == ion]
                 # remove hot spots
                 perc = percentile(ion_rows.int.tolist(), 99.)
-                ion_rows = ion_rows[ion_rows.int < perc]
+                ion_rows.loc[(ion_rows['int'] > perc), ['int']] = perc
                 # compute intensity threshold
                 int_thresh = percentile(ion_rows.int.tolist(), self.q) * self.i
-                rel_int_rows = ion_rows[ion_rows.int > int_thresh]
+                int_rows = ion_rows[ion_rows.int > int_thresh]
                 if first: 
-                    filt_df = rel_int_rows.copy()
+                    filt_df = int_rows.copy()
                     first = False
-                else: filt_df = filt_df.append(rel_int_rows.copy())
+                else: filt_df = filt_df.append(int_rows.copy())
 
-            #all_pix_ids = filt_df.p_ind.unique()
-            #pix_ids = random.choice(all_pix_ids, int(len(all_pix_ids) * self.p))
             if self.p != 1.0:
                 sampled_coord_df = filt_df[['x', 'y']].drop_duplicates().sample(frac=self.p)
             else: 
